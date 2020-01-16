@@ -151,6 +151,7 @@ void stopBrstm() {
     paused = true;
     playback_current_sample = 0;
     delete[] brstmfilememblock;
+    brstm_close();
 }
 
 unsigned char playBrstm(char* filename) {
