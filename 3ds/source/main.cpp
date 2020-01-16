@@ -80,28 +80,43 @@ void audio_deinit() {
     linearFree(audioBuffer);
 }
 
-long playback_current_sample=0;
+unsigned long playback_current_sample=0;
+bool paused = false;
 
-void audio_fillbuffer(void *audioBuffer,size_t size) {
+unsigned char audio_fillbuffer(void *audioBuffer,size_t size) {
     int16_t *dest = (int16_t*)audioBuffer;
     
-    brstm_getbuffer(memblock,playback_current_sample,audio_samplesperbuf*2,true);
-    
-    unsigned int ch2id = HEAD3_num_channels > 1 ? 1 : 0;
-    
-    for(unsigned int i=0; i<audio_samplesperbuf; i++) {
-        int16_t sample = PCM_buffer[0][i];
-        int16_t sample2 = PCM_buffer[ch2id][i];
-        dest[i*2] = /*(sample<<16) | (sample & 0xffff);*/ sample;
-        dest[i*2+1] = /*(sample<<16) | (sample & 0xffff);*/ sample2;
-        playback_current_sample++;
+    if(!paused) {
+        brstm_getbuffer(memblock,playback_current_sample,audio_samplesperbuf,true);
+        unsigned int ch1id = 0;
+        unsigned int ch2id = HEAD3_num_channels > 1 ? 1 : 0;
+        int ioffset=0;
+        
+        for(unsigned int i=0; i<audio_samplesperbuf; i++) {
+            int16_t sample1 = PCM_buffer[ch1id][i];
+            int16_t sample2 = PCM_buffer[ch2id][i];
+            dest[i*2]   = sample1;
+            dest[i*2+1] = sample2;
+            playback_current_sample++;
+            
+            //loop/end
+            if(playback_current_sample>HEAD1_total_samples) {
+                if(HEAD1_loop) {
+                    playback_current_sample=HEAD1_loop_start;
+                    //refill buffer
+                    brstm_getbuffer(memblock,playback_current_sample,audio_samplesperbuf,true);
+                    ioffset-=i;
+                } else {return 1;}
+            }
+        }
+    } else {
+        for(unsigned int i=0; i<audio_samplesperbuf*2; i++) {
+            dest[i] = 0;
+        }
     }
-    /*for(unsigned int i=0; i<audio_samplesperbuf; i++) {
-        int16_t sample = PCM_buffer[ch2id][i];
-        dest[i] = (sample<<16) | (sample & 0xffff);
-    }*/
     
     DSP_FlushDataCache(audioBuffer,size);
+    return 0;
 }
 
 char* swkb_buf;
