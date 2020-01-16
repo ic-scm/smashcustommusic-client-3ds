@@ -1,131 +1,20 @@
-﻿//3DS audio and graphics example made by extrasklep copyright license bla bla bla
+﻿//3DS Smash Custom Music Client
+//Copyright (C) 2020 Extrasklep
 #include <iostream>
 #include <fstream>
 #include <cstring>
 #include <math.h>
 #include <3ds.h>
 
-//brstm stuff
-unsigned int  HEAD1_codec; //char
-unsigned int  HEAD1_loop;  //char
-unsigned int  HEAD1_num_channels; //char
-unsigned int  HEAD1_sample_rate;
-unsigned long HEAD1_loop_start;
-unsigned long HEAD1_total_samples;
-unsigned long HEAD1_ADPCM_offset;
-unsigned long HEAD1_total_blocks;
-unsigned long HEAD1_blocks_size;
-unsigned long HEAD1_blocks_samples;
-unsigned long HEAD1_final_block_size;
-unsigned long HEAD1_final_block_samples;
-unsigned long HEAD1_final_block_size_p;
-unsigned long HEAD1_samples_per_ADPC;
-unsigned long HEAD1_bytes_per_ADPC;
-
-unsigned int  HEAD2_num_tracks;
-unsigned int  HEAD2_track_type;
-
-unsigned int  HEAD2_track_num_channels[8] = {0,0,0,0,0,0,0,0};
-unsigned int  HEAD2_track_lchannel_id [8] = {0,0,0,0,0,0,0,0};
-unsigned int  HEAD2_track_rchannel_id [8] = {0,0,0,0,0,0,0,0};
-//type 1 only
-unsigned int  HEAD2_track_volume      [8] = {0,0,0,0,0,0,0,0};
-unsigned int  HEAD2_track_panning     [8] = {0,0,0,0,0,0,0,0};
-//HEAD3
-unsigned int  HEAD3_num_channels;
-
-int16_t* PCM_samples[16];
-int16_t* PCM_buffer[16];
-
-unsigned long written_samples=0;
-#include "brstm.h" //must be included after this stuff
-
-unsigned char* memblock;
-
-//audio stuff
-void audio_fillbuffer(void *audioBuffer,size_t offset,size_t size,int frequency);
-
-unsigned int audio_samplerate = 0;
-unsigned int audio_samplesperbuf = 0;
-//unsigned int audio_bytespersample = 4;
-
-bool fillBlock = false;
-ndspWaveBuf waveBuf[2];
-u32 *audioBuffer;
-
-void audio_init() {
-    fillBlock=false;
-    audio_samplesperbuf = (audio_samplerate / 15);
-    
-    audioBuffer = (u32*)linearAlloc(audio_samplesperbuf*sizeof(u32)*2);
-    
-    ndspInit();
-    ndspSetOutputMode(NDSP_OUTPUT_STEREO);
-    ndspChnSetInterp(0, NDSP_INTERP_NONE);
-    ndspChnSetRate(0, audio_samplerate);
-    ndspChnSetFormat(0, NDSP_FORMAT_STEREO_PCM16);
-    
-    memset(waveBuf,0,sizeof(waveBuf));
-    waveBuf[0].data_vaddr = &audioBuffer[0];
-    waveBuf[0].nsamples = audio_samplesperbuf;
-    waveBuf[1].data_vaddr = &audioBuffer[audio_samplesperbuf];
-    waveBuf[1].nsamples = audio_samplesperbuf;
-    
-    ndspChnWaveBufAdd(0, &waveBuf[0]);
-    ndspChnWaveBufAdd(0, &waveBuf[1]);
-}
-
-void audio_deinit() {
-    ndspExit();
-    linearFree(audioBuffer);
-}
-
-unsigned long playback_current_sample=0;
-bool paused = false;
-
-unsigned char audio_fillbuffer(void *audioBuffer,size_t size) {
-    int16_t *dest = (int16_t*)audioBuffer;
-    
-    if(!paused) {
-        brstm_getbuffer(memblock,playback_current_sample,audio_samplesperbuf,true);
-        unsigned int ch1id = 0;
-        unsigned int ch2id = HEAD3_num_channels > 1 ? 1 : 0;
-        int ioffset=0;
-        
-        for(unsigned int i=0; i<audio_samplesperbuf; i++) {
-            int16_t sample1 = PCM_buffer[ch1id][i];
-            int16_t sample2 = PCM_buffer[ch2id][i];
-            dest[i*2]   = sample1;
-            dest[i*2+1] = sample2;
-            playback_current_sample++;
-            
-            //loop/end
-            if(playback_current_sample>HEAD1_total_samples) {
-                if(HEAD1_loop) {
-                    playback_current_sample=HEAD1_loop_start;
-                    //refill buffer
-                    brstm_getbuffer(memblock,playback_current_sample,audio_samplesperbuf,true);
-                    ioffset-=i;
-                } else {return 1;}
-            }
-        }
-    } else {
-        for(unsigned int i=0; i<audio_samplesperbuf*2; i++) {
-            dest[i] = 0;
-        }
-    }
-    
-    DSP_FlushDataCache(audioBuffer,size);
-    return 0;
-}
+#include "audio.h"
 
 char* swkb_buf;
-char* getSwkbText() {
+char* getSwkbText(const char* hint) {
     delete[] swkb_buf;
     swkb_buf = new char[255];
     SwkbdState swkbd;
     swkbdInit(&swkbd, SWKBD_TYPE_NORMAL, 1, 255);
-    swkbdSetHintText(&swkbd, "Enter brstm filename");
+    swkbdSetHintText(&swkbd, hint);
     swkbdInputText(&swkbd, swkb_buf, 255);
     return swkb_buf;
 }
@@ -157,7 +46,7 @@ int main() {
     */
     uint8_t colorOffsetCounter = 0;
     
-    std::cout << "Hello from C++!\nPress A to play a brstm\n";
+    std::cout << "Hello from C++!\nPress A to play a brstm\nPress B to stop it\nPress X to pause it\n";
     
     
     // Main loop
@@ -169,41 +58,17 @@ int main() {
         if (kDown & KEY_START) {break;} // break in order to return to hbmenu
         
         if (kDown & KEY_A) {
-            char* filename = getSwkbText();
-            std::cout << "Reading file " << filename << "...\n";
-            std::streampos fsize;
-            std::ifstream file (filename, std::ios::in|std::ios::binary|std::ios::ate);
-            if (file.is_open()) {
-                fsize = file.tellg();
-                delete[] memblock;
-                memblock = new unsigned char [fsize];
-                file.seekg (0, std::ios::beg);
-                file.read ((char*)memblock, fsize);
-                std::cout << "Read " << fsize << " bytes\n";
-                
-                //read brstm
-                unsigned char result=readBrstm(memblock,1,false);
-                if(result>127) {
-                    std::cout << "Error " << (int)result << "\n";
-                    goto brstmread_error;
-                }
-                
-                audio_samplerate = HEAD1_sample_rate;
-                audio_init();
-                
-                goto brstmread_success;
-            } else {std::cout << "Unable to open file\n";}
-            brstmread_error:;
-            delete[] memblock;
+            playBrstm(getSwkbText("Enter brstm filename"));
         }
-        brstmread_success:;
+        if (kDown & KEY_B) {
+            stopBrstm();
+        }
+        if (kDown & KEY_X) {
+            brstm_togglepause();
+        }
         
         //fill audio buffers
-        if (waveBuf[fillBlock].status == NDSP_WBUF_DONE) {
-            audio_fillbuffer(waveBuf[fillBlock].data_pcm16, waveBuf[fillBlock].nsamples);
-            ndspChnWaveBufAdd(0, &waveBuf[fillBlock]);
-            fillBlock = !fillBlock;
-        }
+        audio_mainloop();
         
         //Draw colors on bottom screen
         for(unsigned int y=0;y<yresfbb;y++) {
