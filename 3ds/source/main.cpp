@@ -47,7 +47,7 @@ void audio_fillbuffer(void *audioBuffer,size_t offset,size_t size,int frequency)
 
 unsigned int audio_samplerate = 0;
 unsigned int audio_samplesperbuf = 0;
-unsigned int audio_bytespersample = 4;
+//unsigned int audio_bytespersample = 4;
 
 bool fillBlock = false;
 float mix[12];
@@ -57,9 +57,9 @@ u32 *audioBuffer;
 
 void audio_init() {
     fillBlock=false;
-    audio_samplesperbuf = (audio_samplerate / 10);
+    audio_samplesperbuf = (audio_samplerate / 15);
     
-    audioBuffer = (u32*)linearAlloc(audio_samplesperbuf*audio_bytespersample*2);
+    audioBuffer = (u32*)linearAlloc(audio_samplesperbuf*sizeof(u32)*2);
     
     ndspInit();
     ndspSetOutputMode(NDSP_OUTPUT_STEREO);
@@ -92,20 +92,23 @@ void audio_deinit() {
 long playback_current_sample=0;
 
 void audio_fillbuffer(void *audioBuffer,size_t offset,size_t size,int frequency) {
-    uint32_t *dest = (uint32_t*)audioBuffer;
+    u32 *dest = (u32*)audioBuffer;
     
-    brstm_getbuffer(memblock,playback_current_sample,size,true);
+    brstm_getbuffer(memblock,playback_current_sample,audio_samplesperbuf*2,true);
     
-    for(unsigned int i=0; i<size; i++) {
+    //unsigned int lasti=0;
+    
+    for(unsigned int i=0; i<audio_samplesperbuf; i++) {
         int16_t sample = PCM_buffer[0][i];
         dest[i] = (sample<<16) | (sample & 0xffff);
         playback_current_sample++;
+        //if(i/(size/16)>lasti) {lasti=i/(size/16); std::cout << sample << '\n';}
     }
-    unsigned int ch2id = HEAD3_num_channels > 1 ? 1 : 0;
-    for(unsigned int i=size; i<size*2; i++) {
+    /*unsigned int ch2id = HEAD3_num_channels > 1 ? 1 : 0;
+    for(unsigned int i=audio_samplesperbuf; i<audio_samplesperbuf*2; i++) {
         int16_t sample = PCM_buffer[ch2id][i];
         dest[i] = (sample<<16) | (sample & 0xffff);
-    }
+    }*/
     
     DSP_FlushDataCache(audioBuffer,size);
 }
