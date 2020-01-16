@@ -50,9 +50,7 @@ unsigned int audio_samplesperbuf = 0;
 //unsigned int audio_bytespersample = 4;
 
 bool fillBlock = false;
-float mix[12];
 ndspWaveBuf waveBuf[2];
-size_t stream_offset = 0;
 u32 *audioBuffer;
 
 void audio_init() {
@@ -63,14 +61,9 @@ void audio_init() {
     
     ndspInit();
     ndspSetOutputMode(NDSP_OUTPUT_STEREO);
-    ndspChnSetInterp(0, NDSP_INTERP_LINEAR);
+    ndspChnSetInterp(0, NDSP_INTERP_NONE);
     ndspChnSetRate(0, audio_samplerate);
     ndspChnSetFormat(0, NDSP_FORMAT_STEREO_PCM16);
-    
-    memset(mix, 0, sizeof(mix));
-    mix[0] = 1.0;
-    mix[1] = 1.0;
-    ndspChnSetMix(0, mix);
     
     memset(waveBuf,0,sizeof(waveBuf));
     waveBuf[0].data_vaddr = &audioBuffer[0];
@@ -78,8 +71,6 @@ void audio_init() {
     waveBuf[1].data_vaddr = &audioBuffer[audio_samplesperbuf];
     waveBuf[1].nsamples = audio_samplesperbuf;
     
-    audio_fillbuffer(audioBuffer,stream_offset, audio_samplesperbuf * 2, 400);
-    stream_offset += audio_samplesperbuf;
     ndspChnWaveBufAdd(0, &waveBuf[0]);
     ndspChnWaveBufAdd(0, &waveBuf[1]);
 }
@@ -91,21 +82,21 @@ void audio_deinit() {
 
 long playback_current_sample=0;
 
-void audio_fillbuffer(void *audioBuffer,size_t offset,size_t size,int frequency) {
-    u32 *dest = (u32*)audioBuffer;
+void audio_fillbuffer(void *audioBuffer,size_t size) {
+    int16_t *dest = (int16_t*)audioBuffer;
     
     brstm_getbuffer(memblock,playback_current_sample,audio_samplesperbuf*2,true);
     
-    //unsigned int lasti=0;
+    unsigned int ch2id = HEAD3_num_channels > 1 ? 1 : 0;
     
     for(unsigned int i=0; i<audio_samplesperbuf; i++) {
         int16_t sample = PCM_buffer[0][i];
-        dest[i] = (sample<<16) | (sample & 0xffff);
+        int16_t sample2 = PCM_buffer[ch2id][i];
+        dest[i*2] = /*(sample<<16) | (sample & 0xffff);*/ sample;
+        dest[i*2+1] = /*(sample<<16) | (sample & 0xffff);*/ sample2;
         playback_current_sample++;
-        //if(i/(size/16)>lasti) {lasti=i/(size/16); std::cout << sample << '\n';}
     }
-    /*unsigned int ch2id = HEAD3_num_channels > 1 ? 1 : 0;
-    for(unsigned int i=audio_samplesperbuf; i<audio_samplesperbuf*2; i++) {
+    /*for(unsigned int i=0; i<audio_samplesperbuf; i++) {
         int16_t sample = PCM_buffer[ch2id][i];
         dest[i] = (sample<<16) | (sample & 0xffff);
     }*/
@@ -194,9 +185,8 @@ int main() {
         
         //fill audio buffers
         if (waveBuf[fillBlock].status == NDSP_WBUF_DONE) {
-            audio_fillbuffer(waveBuf[fillBlock].data_pcm16, stream_offset, waveBuf[fillBlock].nsamples,400);
+            audio_fillbuffer(waveBuf[fillBlock].data_pcm16, waveBuf[fillBlock].nsamples);
             ndspChnWaveBufAdd(0, &waveBuf[fillBlock]);
-            stream_offset += waveBuf[fillBlock].nsamples;
             fillBlock = !fillBlock;
         }
         
