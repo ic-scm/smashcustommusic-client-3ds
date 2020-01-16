@@ -22,6 +22,7 @@ char* getSwkbText(const char* hint) {
 int main() {
     gfxInitDefault();
     consoleInit(GFX_TOP, NULL);
+    brstmInit();
     
     /*Result rc = romfsInit();
     if (rc) printf("romfsInit: %08lX\n", rc);
@@ -58,7 +59,16 @@ int main() {
         if (kDown & KEY_START) {break;} // break in order to return to hbmenu
         
         if (kDown & KEY_A) {
-            playBrstm(getSwkbText("Enter brstm filename"));
+            unsigned char res=playBrstm(getSwkbText("Enter brstm filename"));
+            if(res) {
+                if(res<10) {
+                    std::cout << "BRSTM Error: Unable to open file\n";
+                } else if(res<128) {
+                    std::cout << "BRSTM Error: NDSP Init error\n";
+                } else {
+                    std::cout << "BRSTM Error: BRSTM read error\n";
+                }
+            }
         }
         if (kDown & KEY_B) {
             stopBrstm();
@@ -66,9 +76,6 @@ int main() {
         if (kDown & KEY_X) {
             brstm_togglepause();
         }
-        
-        //fill audio buffers
-        audio_mainloop();
         
         //Draw colors on bottom screen
         for(unsigned int y=0;y<yresfbb;y++) {
@@ -86,6 +93,7 @@ int main() {
         gfxSwapBuffers();
     }
     
+    brstmExit();
     //romfsExit();
     gfxExit();
     return 0;

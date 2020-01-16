@@ -48,13 +48,13 @@ bool fillBlock = false;
 ndspWaveBuf waveBuf[2];
 u32 *audioBuffer;
 
-void audio_init() {
+unsigned char audio_init() {
     fillBlock=false;
     audio_samplesperbuf = (audio_samplerate / 15);
     
     audioBuffer = (u32*)linearAlloc(audio_samplesperbuf*sizeof(u32)*2);
     
-    ndspInit();
+    if(ndspInit()) {return 1;}
     ndspSetOutputMode(NDSP_OUTPUT_STEREO);
     ndspChnSetInterp(0, NDSP_INTERP_NONE);
     ndspChnSetRate(0, audio_samplerate);
@@ -67,6 +67,7 @@ void audio_init() {
     waveBuf[1].nsamples = audio_samplesperbuf;
     waveBuf[0].status = NDSP_WBUF_DONE;
     waveBuf[1].status = NDSP_WBUF_DONE;
+    return 0;
 }
 
 void audio_deinit() {
@@ -118,13 +119,20 @@ unsigned char audio_fillbuffer(void *audioBuffer,size_t size) {
     return 0;
 }
 
-void audio_mainloop() {
-    //fill audio buffers
-    if (waveBuf[fillBlock].status == NDSP_WBUF_DONE && brstm_isopen) {
-        audio_fillbuffer(waveBuf[fillBlock].data_pcm16, waveBuf[fillBlock].nsamples);
-        ndspChnWaveBufAdd(0, &waveBuf[fillBlock]);
-        fillBlock = !fillBlock;
-    }    
+bool brstmSTOP = false;
+
+void audio_mainloop(void* arg) {
+    while(1) {
+        //10ms
+        svcSleepThread(10 * 1000000);
+        if(brstmSTOP) {break;}
+        //fill audio buffers
+        if (waveBuf[fillBlock].status == NDSP_WBUF_DONE && brstm_isopen) {
+            audio_fillbuffer(waveBuf[fillBlock].data_pcm16, waveBuf[fillBlock].nsamples);
+            ndspChnWaveBufAdd(0, &waveBuf[fillBlock]);
+            fillBlock = !fillBlock;
+        }
+    }
 }
 
 void brstm_togglepause() {
@@ -155,7 +163,6 @@ void stopBrstm() {
 }
 
 unsigned char playBrstm(char* filename) {
-    std::cout << "Reading file " << filename << "...\n";
     std::streampos fsize;
     std::ifstream file (filename, std::ios::in|std::ios::binary|std::ios::ate);
     if (file.is_open()) {
@@ -166,12 +173,10 @@ unsigned char playBrstm(char* filename) {
         file.read((char*)brstmfilememblock, fsize);
         file.close();
         
-        std::cout << "Read " << fsize << " bytes\n";
-        
         //Read the BRSTM file headers
         unsigned char result=readBrstm(brstmfilememblock,1,false);
         if(result>127) {
-            std::cout << "Error " << (int)result << "\n";
+            //error
             delete[] brstmfilememblock;
             return result;
         }
@@ -179,12 +184,30 @@ unsigned char playBrstm(char* filename) {
         audio_samplerate = HEAD1_sample_rate;
         brstm_isopen = true;
         paused = true;
-        audio_init();
+        if(audio_init()) {
+            //error
+            stopBrstm();
+            return 10;
+        }
         
         return 0;
     } else {
-        std::cout << "Unable to open file\n";
+        //cannot open file error
         return 1;
     }
     return 1;
+}
+
+Thread brstmThread;
+void brstmInit() {
+    int32_t prio;
+    svcGetThreadPriority(&prio, CUR_THREAD_HANDLE);
+    brstmThread = threadCreate(audio_mainloop, (void*)(0), 4096, prio-1, -2, false);
+}
+
+void brstmExit() {
+    stopBrstm();
+    brstmSTOP = true;
+    threadJoin(brstmThread, U64_MAX);
+    threadFree(brstmThread);
 }
