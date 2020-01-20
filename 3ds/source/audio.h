@@ -86,11 +86,19 @@ bool paused = true;
 unsigned char audio_fillbuffer(void *audioBuffer,size_t size) {
     int16_t *dest = (int16_t*)audioBuffer;
     
+    int playback_seconds=playback_current_sample/HEAD1_sample_rate;
+    std::cout << '\r';
+    if(paused) {std::cout << "Paused ";}
+    std::cout << "(" << playback_seconds << "/" << "??:??" << ") (< >:Seek):           \r";
+    
     if(!paused) {
-        brstm_getbuffer(brstmfilememblock,playback_current_sample,audio_samplesperbuf,true);
+        brstm_getbuffer(brstmfilememblock,playback_current_sample,
+                        //Avoid reading garbage outside the file
+                        HEAD1_total_samples-playback_current_sample < audio_samplesperbuf ? HEAD1_total_samples-playback_current_sample : audio_samplesperbuf,
+                        true);
         unsigned int ch1id = 0;
         unsigned int ch2id = HEAD3_num_channels > 1 ? 1 : 0;
-        int ioffset=0;
+        signed int ioffset=0;
         
         for(unsigned int i=0; i<audio_samplesperbuf; i++) {
             int16_t sample1 = PCM_buffer[ch1id][i+ioffset];

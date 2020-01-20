@@ -76,6 +76,12 @@ int main() {
         if (kDown & KEY_X) {
             brstm_togglepause();
         }
+        if(kDown & KEY_LEFT) {
+            brstm_seek(-HEAD1_sample_rate);
+        }
+        if(kDown & KEY_RIGHT) {
+            brstm_seek(HEAD1_sample_rate);
+        }
         
         //Draw colors on bottom screen
         for(unsigned int y=0;y<yresfbb;y++) {
