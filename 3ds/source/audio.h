@@ -93,14 +93,14 @@ unsigned char audio_fillbuffer(void *audioBuffer,size_t size) {
         int ioffset=0;
         
         for(unsigned int i=0; i<audio_samplesperbuf; i++) {
-            int16_t sample1 = PCM_buffer[ch1id][i];
-            int16_t sample2 = PCM_buffer[ch2id][i];
+            int16_t sample1 = PCM_buffer[ch1id][i+ioffset];
+            int16_t sample2 = PCM_buffer[ch2id][i+ioffset];
             dest[i*2]   = sample1;
             dest[i*2+1] = sample2;
             playback_current_sample++;
             
             //loop/end
-            if(playback_current_sample>HEAD1_total_samples) {
+            if(playback_current_sample > HEAD1_total_samples) {
                 if(HEAD1_loop) {
                     playback_current_sample=HEAD1_loop_start;
                     //refill buffer
@@ -119,6 +119,7 @@ unsigned char audio_fillbuffer(void *audioBuffer,size_t size) {
     return 0;
 }
 
+//stop signal to the thread
 bool brstmSTOP = false;
 
 void audio_mainloop(void* arg) {
@@ -128,7 +129,11 @@ void audio_mainloop(void* arg) {
         if(brstmSTOP) {break;}
         //fill audio buffers
         if (waveBuf[fillBlock].status == NDSP_WBUF_DONE && brstm_isopen) {
-            audio_fillbuffer(waveBuf[fillBlock].data_pcm16, waveBuf[fillBlock].nsamples);
+            if(audio_fillbuffer(waveBuf[fillBlock].data_pcm16, waveBuf[fillBlock].nsamples)) {
+                //end of file reached. stop playing
+                paused = true;
+                playback_current_sample = 0;
+            }
             ndspChnWaveBufAdd(0, &waveBuf[fillBlock]);
             fillBlock = !fillBlock;
         }
@@ -154,12 +159,15 @@ void brstm_seekto(long targetsample) {
 }
 
 void stopBrstm() {
-    audio_deinit();
-    brstm_isopen = false;
     paused = true;
     playback_current_sample = 0;
-    delete[] brstmfilememblock;
-    brstm_close();
+    //don't try to close the brstm if it's not open, it will cause a segfault!
+    if(brstm_isopen) {
+        audio_deinit();
+        delete[] brstmfilememblock;
+        brstm_close();
+        brstm_isopen = false;
+    }
 }
 
 unsigned char playBrstm(char* filename) {
@@ -181,6 +189,7 @@ unsigned char playBrstm(char* filename) {
             return result;
         }
         
+        //set NDSP sample rate to the BRSTM's sample rate
         audio_samplerate = HEAD1_sample_rate;
         brstm_isopen = true;
         paused = true;
