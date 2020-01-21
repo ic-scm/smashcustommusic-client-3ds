@@ -185,7 +185,7 @@ void stopBrstm() {
     }
 }
 
-//BRSTM read thread
+//BRSTM reading thread
 unsigned char brstm_readfile_res = 50;
 bool brstmBeingRead = false;
 bool brstmDoneReading = false;
@@ -201,7 +201,7 @@ void brstm_readfile(void* arg) {
         try {
             brstmfilememblock = new unsigned char [fsize];
         } catch(std::bad_alloc& badAlloc) {
-            std::cout << "Alloc Error " << badAlloc.what() << '\n';
+            //Not enough memory
             file.close();
             brstm_readfile_res = 40;
             brstmBeingRead = false;
@@ -250,7 +250,6 @@ void brstm_readfile(void* arg) {
 }
 
 //Load a BRSTM
-//TODO read brstm in a new thread
 Thread brstmReadThread;
 void playBrstm(char* filename) {
     if(brstmBeingRead) {
