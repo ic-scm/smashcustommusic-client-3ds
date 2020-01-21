@@ -1,6 +1,8 @@
 //3DS Smash Custom Music Client
 //Copyright (C) 2020 Extrasklep
 
+#pragma once
+
 //brstm stuff
 unsigned int  HEAD1_codec; //char
 unsigned int  HEAD1_loop;  //char
@@ -130,6 +132,7 @@ unsigned char audio_fillbuffer(void *audioBuffer,size_t size) {
 //stop signal to the thread
 bool brstmSTOP = false;
 
+//Playback/decode thread
 void audio_mainloop(void* arg) {
     while(1) {
         //10ms
@@ -148,10 +151,12 @@ void audio_mainloop(void* arg) {
     }
 }
 
+//Pause/resume playback
 void brstm_togglepause() {
     paused=!paused;
 }
 
+//Seek (current sample += arg samples)
 void brstm_seek(long samples) {
     long targetsample = playback_current_sample;
     targetsample += samples;
@@ -160,12 +165,14 @@ void brstm_seek(long samples) {
     playback_current_sample = targetsample;
 }
 
+//Seek to (current sample = arg samples)
 void brstm_seekto(long targetsample) {
     if(targetsample>HEAD1_total_samples) {targetsample=HEAD1_total_samples;}
     if(targetsample<0) {targetsample=0;}
     playback_current_sample = targetsample;
 }
 
+//Stop playback and unload the BRSTM
 void stopBrstm() {
     paused = true;
     playback_current_sample = 0;
@@ -178,6 +185,8 @@ void stopBrstm() {
     }
 }
 
+//Load a BRSTM
+//TODO read brstm in a new thread
 unsigned char playBrstm(char* filename) {
     std::streampos fsize;
     std::ifstream file (filename, std::ios::in|std::ios::binary|std::ios::ate);
@@ -215,6 +224,7 @@ unsigned char playBrstm(char* filename) {
     return 1;
 }
 
+//Initialize BRSTM playback thread (run this at the beginning of main)
 Thread brstmThread;
 void brstmInit() {
     int32_t prio;
@@ -222,6 +232,7 @@ void brstmInit() {
     brstmThread = threadCreate(audio_mainloop, (void*)(0), 4096, prio-1, -2, false);
 }
 
+//Stop playback and end the thread (run this at the end of main/when exiting the program)
 void brstmExit() {
     stopBrstm();
     brstmSTOP = true;
