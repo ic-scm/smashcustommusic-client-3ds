@@ -1,6 +1,7 @@
 //3DS Smash Custom Music Client
 //Copyright (C) 2020 Extrasklep
 
+#include <new>
 #pragma once
 
 //brstm stuff
@@ -134,10 +135,9 @@ bool brstmSTOP = false;
 
 //Playback/decode thread
 void audio_mainloop(void* arg) {
-    while(1) {
+    while(!brstmSTOP) {
         //10ms
         svcSleepThread(10 * 1000000);
-        if(brstmSTOP) {break;}
         //fill audio buffers
         if (waveBuf[fillBlock].status == NDSP_WBUF_DONE && brstm_isopen) {
             if(audio_fillbuffer(waveBuf[fillBlock].data_pcm16, waveBuf[fillBlock].nsamples)) {
@@ -185,15 +185,29 @@ void stopBrstm() {
     }
 }
 
-//Load a BRSTM
-//TODO read brstm in a new thread
-unsigned char playBrstm(char* filename) {
+//BRSTM read thread
+unsigned char brstm_readfile_res = 50;
+bool brstmBeingRead = false;
+bool brstmDoneReading = false;
+void brstm_readfile(void* arg) {
+    char* filename = (char*) arg;
+    
+    if(brstm_isopen) {stopBrstm();}
+    
     std::streampos fsize;
     std::ifstream file (filename, std::ios::in|std::ios::binary|std::ios::ate);
     if (file.is_open()) {
         fsize = file.tellg();
-        if(brstm_isopen) {stopBrstm();}
-        brstmfilememblock = new unsigned char [fsize];
+        try {
+            brstmfilememblock = new unsigned char [fsize];
+        } catch(std::bad_alloc& badAlloc) {
+            std::cout << "Alloc Error " << badAlloc.what() << '\n';
+            file.close();
+            brstm_readfile_res = 40;
+            brstmBeingRead = false;
+            brstmDoneReading = true;
+            return;
+        }
         file.seekg(0, std::ios::beg);
         file.read((char*)brstmfilememblock, fsize);
         file.close();
@@ -201,9 +215,12 @@ unsigned char playBrstm(char* filename) {
         //Read the BRSTM file headers
         unsigned char result=readBrstm(brstmfilememblock,1,false);
         if(result>127) {
-            //error
+            //BRSTM read error
             delete[] brstmfilememblock;
-            return result;
+            brstm_readfile_res = result;
+            brstmBeingRead = false;
+            brstmDoneReading = true;
+            return;
         }
         
         //set NDSP sample rate to the BRSTM's sample rate
@@ -211,17 +228,44 @@ unsigned char playBrstm(char* filename) {
         brstm_isopen = true;
         paused = true;
         if(audio_init()) {
-            //error
+            //NDSP init error
             stopBrstm();
-            return 10;
+            brstm_readfile_res = 10;
+            brstmBeingRead = false;
+            brstmDoneReading = true;
+            return;
         }
         
-        return 0;
+        brstm_readfile_res = 0;
+        brstmBeingRead = false;
+        brstmDoneReading = true;
+        return;
     } else {
         //cannot open file error
-        return 1;
+        brstm_readfile_res = 1;
+        brstmBeingRead = false;
+        brstmDoneReading = true;
+        return;
     }
-    return 1;
+}
+
+//Load a BRSTM
+//TODO read brstm in a new thread
+Thread brstmReadThread;
+void playBrstm(char* filename) {
+    if(brstmBeingRead) {
+        //wait for the thread to return
+        threadJoin(brstmReadThread,
+                   //20 second timeout
+                   (uint64_t)20000 * 1000000);
+        threadFree(brstmReadThread);
+    }
+    int32_t prio;
+    svcGetThreadPriority(&prio, CUR_THREAD_HANDLE);
+    brstmReadThread = threadCreate(brstm_readfile, (void*)(filename), 4096, prio+1, -2, true);
+    
+    brstmDoneReading = false;
+    brstmBeingRead = true;
 }
 
 //Initialize BRSTM playback thread (run this at the beginning of main)
