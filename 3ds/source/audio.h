@@ -157,17 +157,17 @@ void brstm_togglepause() {
 }
 
 //Seek (current sample += arg samples)
-void brstm_seek(long samples) {
-    long targetsample = playback_current_sample;
+void brstm_seek(signed long samples) {
+    signed long targetsample = playback_current_sample;
     targetsample += samples;
-    if(targetsample>HEAD1_total_samples) {targetsample=HEAD1_total_samples;}
+    if(targetsample>(signed long)HEAD1_total_samples) {targetsample=HEAD1_total_samples;}
     if(targetsample<0) {targetsample=0;}
     playback_current_sample = targetsample;
 }
 
 //Seek to (current sample = arg samples)
-void brstm_seekto(long targetsample) {
-    if(targetsample>HEAD1_total_samples) {targetsample=HEAD1_total_samples;}
+void brstm_seekto(signed long targetsample) {
+    if(targetsample>(signed long)HEAD1_total_samples) {targetsample=HEAD1_total_samples;}
     if(targetsample<0) {targetsample=0;}
     playback_current_sample = targetsample;
 }
