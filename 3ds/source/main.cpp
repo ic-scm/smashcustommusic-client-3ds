@@ -7,7 +7,7 @@
 #include <3ds.h>
 
 #include "audio.h"
-#include "http.h"
+//#include "http.h"
 
 char* swkb_buf;
 char* getSwkbText(const char* hint) {
