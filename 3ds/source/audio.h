@@ -190,73 +190,6 @@ void audio_brstm_stop() {
     }
 }
 
-/*//BRSTM reading thread
-unsigned char audio_brstm_readfile_res = 50;
-bool audio_brstm_beingRead = false;
-bool audio_brstm_doneReading = false;
-void audio_brstm_readfile(void* arg) {
-    char* filename = (char*) arg;
-    
-    if(audio_brstm_isopen) {audio_brstm_stop();}
-    
-    std::streampos fsize;
-    std::ifstream file (filename, std::ios::in|std::ios::binary|std::ios::ate);
-    if (file.is_open()) {
-        fsize = file.tellg();
-        try {
-            brstmfilememblock = new unsigned char [fsize];
-        } catch(std::bad_alloc& badAlloc) {
-            //Not enough memory
-            file.close();
-            audio_brstm_readfile_res = 40;
-            audio_brstm_beingRead = false;
-            audio_brstm_doneReading = true;
-            return;
-        }
-        file.seekg(0, std::ios::beg);
-        file.read((char*)brstmfilememblock, fsize);
-        file.close();
-        
-        //Read the BRSTM file headers
-        unsigned char result=readBrstm(brstmfilememblock,1,false);
-        if(result>127) {
-            //BRSTM read error
-            delete[] brstmfilememblock;
-            audio_brstm_readfile_res = result;
-            audio_brstm_beingRead = false;
-            audio_brstm_doneReading = true;
-            return;
-        }
-        
-        //set NDSP sample rate to the BRSTM's sample rate
-        audio_samplerate = HEAD1_sample_rate;
-        audio_brstm_isopen = true;
-        audio_brstm_paused = true;
-        if(audio_init()) {
-            //NDSP init error
-            audio_brstm_stop();
-            audio_brstm_readfile_res = 10;
-            audio_brstm_beingRead = false;
-            audio_brstm_doneReading = true;
-            return;
-        }
-        
-        audio_brstm_readfile_res = 0;
-        audio_brstm_beingRead = false;
-        audio_brstm_doneReading = true;
-        return;
-    } else {
-        //cannot open file error
-        audio_brstm_readfile_res = 1;
-        audio_brstm_beingRead = false;
-        audio_brstm_doneReading = true;
-        return;
-    }
-}
-
-//Load a BRSTM
-Thread brstmReadThread;*/
-
 //Load a BRSTM
 unsigned char audio_brstm_play(char* filename) {
     if(audio_brstm_isopen) {audio_brstm_stop();}
@@ -282,20 +215,6 @@ unsigned char audio_brstm_play(char* filename) {
     }
     
     return 0;
-    
-    /*if(audio_brstm_beingRead) {
-        //wait for the thread to return
-        threadJoin(brstmReadThread,
-                   //20 second timeout
-                   (uint64_t)20000 * 1000000);
-        threadFree(brstmReadThread);
-    }
-    int32_t prio;
-    svcGetThreadPriority(&prio, CUR_THREAD_HANDLE);
-    brstmReadThread = threadCreate(audio_brstm_readfile, (void*)(filename), 4096, prio+1, -2, true);
-    
-    audio_brstm_doneReading = false;
-    audio_brstm_beingRead = true;*/
 }
 
 //Initialize BRSTM playback thread (run this at the beginning of main)
