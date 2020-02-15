@@ -152,12 +152,12 @@ void audio_mainloop(void* arg) {
 }
 
 //Pause/resume playback
-void brstm_togglepause() {
+void audio_brstm_togglepause() {
     paused=!paused;
 }
 
 //Seek (current sample += arg samples)
-void brstm_seek(signed long samples) {
+void audio_brstm_seek(signed long samples) {
     signed long targetsample = playback_current_sample;
     targetsample += samples;
     if(targetsample>(signed long)HEAD1_total_samples) {targetsample=HEAD1_total_samples;}
@@ -166,14 +166,14 @@ void brstm_seek(signed long samples) {
 }
 
 //Seek to (current sample = arg samples)
-void brstm_seekto(signed long targetsample) {
+void audio_brstm_seekto(signed long targetsample) {
     if(targetsample>(signed long)HEAD1_total_samples) {targetsample=HEAD1_total_samples;}
     if(targetsample<0) {targetsample=0;}
     playback_current_sample = targetsample;
 }
 
 //Stop playback and unload the BRSTM
-void stopBrstm() {
+void audio_brstm_stop() {
     paused = true;
     playback_current_sample = 0;
     //don't try to close the brstm if it's not open, it will cause a segfault!
@@ -189,7 +189,7 @@ void stopBrstm() {
 unsigned char brstm_readfile_res = 50;
 bool brstmBeingRead = false;
 bool brstmDoneReading = false;
-void brstm_readfile(void* arg) {
+void audio_brstm_readfile(void* arg) {
     char* filename = (char*) arg;
     
     if(brstm_isopen) {stopBrstm();}
@@ -251,7 +251,7 @@ void brstm_readfile(void* arg) {
 
 //Load a BRSTM
 Thread brstmReadThread;
-void playBrstm(char* filename) {
+void audio_brstm_play(char* filename) {
     if(brstmBeingRead) {
         //wait for the thread to return
         threadJoin(brstmReadThread,
@@ -269,14 +269,14 @@ void playBrstm(char* filename) {
 
 //Initialize BRSTM playback thread (run this at the beginning of main)
 Thread brstmThread;
-void brstmInit() {
+void audio_brstm_init() {
     int32_t prio;
     svcGetThreadPriority(&prio, CUR_THREAD_HANDLE);
     brstmThread = threadCreate(audio_mainloop, (void*)(0), 4096, prio-1, -2, false);
 }
 
 //Stop playback and end the thread (run this at the end of main/when exiting the program)
-void brstmExit() {
+void audio_brstm_exit() {
     stopBrstm();
     brstmSTOP = true;
     threadJoin(brstmThread, U64_MAX);
