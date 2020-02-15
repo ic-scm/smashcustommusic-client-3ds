@@ -192,7 +192,7 @@ bool brstmDoneReading = false;
 void audio_brstm_readfile(void* arg) {
     char* filename = (char*) arg;
     
-    if(brstm_isopen) {stopBrstm();}
+    if(brstm_isopen) {audio_brstm_stop();}
     
     std::streampos fsize;
     std::ifstream file (filename, std::ios::in|std::ios::binary|std::ios::ate);
@@ -229,7 +229,7 @@ void audio_brstm_readfile(void* arg) {
         paused = true;
         if(audio_init()) {
             //NDSP init error
-            stopBrstm();
+            audio_brstm_stop();
             brstm_readfile_res = 10;
             brstmBeingRead = false;
             brstmDoneReading = true;
@@ -261,7 +261,7 @@ void audio_brstm_play(char* filename) {
     }
     int32_t prio;
     svcGetThreadPriority(&prio, CUR_THREAD_HANDLE);
-    brstmReadThread = threadCreate(brstm_readfile, (void*)(filename), 4096, prio+1, -2, true);
+    brstmReadThread = threadCreate(audio_brstm_readfile, (void*)(filename), 4096, prio+1, -2, true);
     
     brstmDoneReading = false;
     brstmBeingRead = true;
@@ -277,7 +277,7 @@ void audio_brstm_init() {
 
 //Stop playback and end the thread (run this at the end of main/when exiting the program)
 void audio_brstm_exit() {
-    stopBrstm();
+    audio_brstm_stop();
     brstmSTOP = true;
     threadJoin(brstmThread, U64_MAX);
     threadFree(brstmThread);

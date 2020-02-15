@@ -23,7 +23,7 @@ char* getSwkbText(const char* hint) {
 int main() {
     gfxInitDefault();
     consoleInit(GFX_TOP, NULL);
-    brstmInit();
+    audio_brstm_init();
     
     /*Result rc = romfsInit();
     if (rc) printf("romfsInit: %08lX\n", rc);
@@ -63,7 +63,7 @@ int main() {
         if (kDown & KEY_START) {break;} // break in order to return to hbmenu
         
         if (kDown & KEY_A) {
-            playBrstm(getSwkbText("Enter brstm filename"));
+            audio_brstm_play(getSwkbText("Enter brstm filename"));
         }
         if(brstmBeingRead) {
             //show loading status
@@ -88,16 +88,16 @@ int main() {
             }
         }
         if (kDown & KEY_B) {
-            stopBrstm();
+            audio_brstm_stop();
         }
         if (kDown & KEY_X) {
-            brstm_togglepause();
+            audio_brstm_togglepause();
         }
         if(kDown & KEY_LEFT) {
-            brstm_seek(-HEAD1_sample_rate);
+            audio_brstm_seek(-HEAD1_sample_rate);
         }
         if(kDown & KEY_RIGHT) {
-            brstm_seek(HEAD1_sample_rate);
+            audio_brstm_seek(HEAD1_sample_rate);
         }
         
         //Draw colors on bottom screen
@@ -116,7 +116,7 @@ int main() {
         gfxSwapBuffers();
     }
     
-    brstmExit();
+    audio_brstm_exit();
     //romfsExit();
     gfxExit();
     return 0;
