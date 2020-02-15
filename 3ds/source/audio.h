@@ -41,6 +41,7 @@ unsigned long written_samples=0;
 
 //BRSTM file data
 unsigned char* brstmfilememblock;
+std::ifstream audio_brstm_file;
 bool audio_brstm_isopen = false;
 
 //audio stuff
@@ -97,10 +98,10 @@ unsigned char audio_fillbuffer(void *audioBuffer,size_t size) {
     std::cout << "(" << playback_seconds << "/" << "??:??" << ") (< >:Seek):           \r";
     
     if(!audio_brstm_paused) {
-        brstm_getbuffer(brstmfilememblock,playback_current_sample,
+        brstm_fstream_getbuffer(audio_brstm_file,playback_current_sample,
                         //Avoid reading garbage outside the file
-                        HEAD1_total_samples-playback_current_sample < audio_samplesperbuf ? HEAD1_total_samples-playback_current_sample : audio_samplesperbuf,
-                        true);
+                        HEAD1_total_samples-playback_current_sample < audio_samplesperbuf ? HEAD1_total_samples-playback_current_sample : audio_samplesperbuf
+                        );
         unsigned int ch1id = 0;
         unsigned int ch2id = HEAD3_num_channels > 1 ? 1 : 0;
         signed int ioffset=0;
@@ -117,7 +118,7 @@ unsigned char audio_fillbuffer(void *audioBuffer,size_t size) {
                 if(HEAD1_loop) {
                     playback_current_sample=HEAD1_loop_start;
                     //refill buffer
-                    brstm_getbuffer(brstmfilememblock,playback_current_sample,audio_samplesperbuf,true);
+                    brstm_fstream_getbuffer(audio_brstm_file,playback_current_sample,audio_samplesperbuf);
                     ioffset-=i;
                 } else {return 1;}
             }
@@ -182,12 +183,14 @@ void audio_brstm_stop() {
     if(audio_brstm_isopen) {
         audio_deinit();
         delete[] brstmfilememblock;
+        audio_brstm_file.close();
         brstm_close();
         audio_brstm_isopen = false;
+        
     }
 }
 
-//BRSTM reading thread
+/*//BRSTM reading thread
 unsigned char audio_brstm_readfile_res = 50;
 bool audio_brstm_beingRead = false;
 bool audio_brstm_doneReading = false;
@@ -252,9 +255,33 @@ void audio_brstm_readfile(void* arg) {
 }
 
 //Load a BRSTM
-Thread brstmReadThread;
-void audio_brstm_play(char* filename) {
-    if(audio_brstm_beingRead) {
+Thread brstmReadThread;*/
+
+unsigned char audio_brstm_play(char* filename) {
+    audio_brstm_file.open(filename, std::ios::in|std::ios::binary);
+    if(!audio_brstm_file.is_open()) {
+        return 1;
+    }
+    //Read BRSTM file headers
+    unsigned char result = brstm_fstream_read(audio_brstm_file,1);
+    if(result>127) {
+        audio_brstm_file.close();
+        return result;
+    }
+    
+    //set NDSP sample rate to the BRSTM's sample rate
+    audio_samplerate = HEAD1_sample_rate;
+    audio_brstm_isopen = true;
+    audio_brstm_paused = true;
+    if(audio_init()) {
+        //NDSP init error
+        audio_brstm_stop();
+        return 100;
+    }
+    
+    return 0;
+    
+    /*if(audio_brstm_beingRead) {
         //wait for the thread to return
         threadJoin(brstmReadThread,
                    //20 second timeout
@@ -266,7 +293,7 @@ void audio_brstm_play(char* filename) {
     brstmReadThread = threadCreate(audio_brstm_readfile, (void*)(filename), 4096, prio+1, -2, true);
     
     audio_brstm_doneReading = false;
-    audio_brstm_beingRead = true;
+    audio_brstm_beingRead = true;*/
 }
 
 //Initialize BRSTM playback thread (run this at the beginning of main)

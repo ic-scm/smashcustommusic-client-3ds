@@ -63,9 +63,22 @@ int main() {
         if (kDown & KEY_START) {break;} // break in order to return to hbmenu
         
         if (kDown & KEY_A) {
-            audio_brstm_play(getSwkbText("Enter brstm filename"));
+            unsigned char res = audio_brstm_play(getSwkbText("Enter brstm filename"));
+            if(res) {
+                if(res<10) {
+                    std::cout << "BRSTM Error: Unable to open file\n";
+                } else if(res<50) {
+                    std::cout << "BRSTM Error: Not enough memory\n";
+                } else if(res<60) {
+                    std::cout << "BRSTM Error: Thread error\n";
+                } else if(res<128) {
+                    std::cout << "BRSTM Error: NDSP Init error\n";
+                } else {
+                    std::cout << "BRSTM Error: BRSTM read error\n";
+                }
+            }
         }
-        if(audio_brstm_beingRead) {
+        /*if(audio_brstm_beingRead) {
             //show loading status
             const char* loadingbar = (loadingBarStatusPos=!loadingBarStatusPos) ? "- " : " -";
             std::cout << "\r[" << loadingbar << "] Loading BRSTM ";
@@ -87,7 +100,7 @@ int main() {
                     std::cout << "BRSTM Error: BRSTM read error\n";
                 }
             }
-        }
+        }*/
         if (kDown & KEY_B) {
             audio_brstm_stop();
         }
