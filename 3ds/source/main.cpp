@@ -50,10 +50,6 @@ int main() {
     
     std::cout << "Hello from C++!\nPress A to play a brstm\nPress B to stop it\nPress X to pause it\n";
     
-    
-    //temp
-    bool loadingBarStatusPos = false;
-    
     // Main loop
     while (aptMainLoop()) {
         
@@ -78,29 +74,6 @@ int main() {
                 }
             }
         }
-        /*if(audio_brstm_beingRead) {
-            //show loading status
-            const char* loadingbar = (loadingBarStatusPos=!loadingBarStatusPos) ? "- " : " -";
-            std::cout << "\r[" << loadingbar << "] Loading BRSTM ";
-        }
-        if(audio_brstm_doneReading) {
-            //set it back to false because we already got it
-            audio_brstm_doneReading = false;
-            unsigned char res = audio_brstm_readfile_res;
-            if(res) {
-                if(res<10) {
-                    std::cout << "BRSTM Error: Unable to open file\n";
-                } else if(res<50) {
-                    std::cout << "BRSTM Error: Not enough memory\n";
-                } else if(res<60) {
-                    std::cout << "BRSTM Error: Thread error\n";
-                } else if(res<128) {
-                    std::cout << "BRSTM Error: NDSP Init error\n";
-                } else {
-                    std::cout << "BRSTM Error: BRSTM read error\n";
-                }
-            }
-        }*/
         if (kDown & KEY_B) {
             audio_brstm_stop();
         }

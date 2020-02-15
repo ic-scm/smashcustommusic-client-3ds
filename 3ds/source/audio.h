@@ -257,7 +257,9 @@ void audio_brstm_readfile(void* arg) {
 //Load a BRSTM
 Thread brstmReadThread;*/
 
+//Load a BRSTM
 unsigned char audio_brstm_play(char* filename) {
+    if(audio_brstm_isopen) {audio_brstm_stop();}
     audio_brstm_file.open(filename, std::ios::in|std::ios::binary);
     if(!audio_brstm_file.is_open()) {
         return 1;
