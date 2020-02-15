@@ -65,14 +65,15 @@ int main() {
         if (kDown & KEY_A) {
             audio_brstm_play(getSwkbText("Enter brstm filename"));
         }
-        if(brstmBeingRead) {
+        if(audio_brstm_beingRead) {
             //show loading status
             const char* loadingbar = (loadingBarStatusPos=!loadingBarStatusPos) ? "- " : " -";
             std::cout << "\r[" << loadingbar << "] Loading BRSTM ";
         }
-        if(brstmDoneReading) {
-            brstmDoneReading = false;
-            unsigned char res = brstm_readfile_res;
+        if(audio_brstm_doneReading) {
+            //set it back to false because we already got it
+            audio_brstm_doneReading = false;
+            unsigned char res = audio_brstm_readfile_res;
             if(res) {
                 if(res<10) {
                     std::cout << "BRSTM Error: Unable to open file\n";
