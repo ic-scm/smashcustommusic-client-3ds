@@ -40,7 +40,6 @@ unsigned long written_samples=0;
 #include "brstm.h" //must be included after this stuff
 
 //BRSTM file data
-unsigned char* brstmfilememblock;
 std::ifstream audio_brstm_file;
 bool audio_brstm_isopen = false;
 
@@ -182,16 +181,14 @@ void audio_brstm_stop() {
     //don't try to close the brstm if it's not open, it will cause a segfault!
     if(audio_brstm_isopen) {
         audio_deinit();
-        delete[] brstmfilememblock;
         audio_brstm_file.close();
         brstm_close();
         audio_brstm_isopen = false;
-        
     }
 }
 
 //Load a BRSTM
-unsigned char audio_brstm_play(char* filename) {
+unsigned char audio_brstm_play(const char* filename) {
     if(audio_brstm_isopen) {audio_brstm_stop();}
     audio_brstm_file.open(filename, std::ios::in|std::ios::binary);
     if(!audio_brstm_file.is_open()) {

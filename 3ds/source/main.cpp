@@ -7,7 +7,7 @@
 #include <3ds.h>
 
 #include "audio.h"
-//#include "http.h"
+#include "http.h"
 
 char* swkb_buf;
 char* getSwkbText(const char* hint) {
@@ -59,14 +59,18 @@ int main() {
         if (kDown & KEY_START) {break;} // break in order to return to hbmenu
         
         if (kDown & KEY_A) {
-            unsigned char res = audio_brstm_play(getSwkbText("Enter brstm filename"));
+            unsigned char res;
+            res = http_downloadfile(getSwkbText("Enter brstm URL"),"/scm.brstm");
+            if(res) {
+                std::cout << "Download fail\n";
+            }
+            
+            res = audio_brstm_play("/scm.brstm");
             if(res) {
                 if(res<10) {
                     std::cout << "BRSTM Error: Unable to open file\n";
                 } else if(res<50) {
                     std::cout << "BRSTM Error: Not enough memory\n";
-                } else if(res<60) {
-                    std::cout << "BRSTM Error: Thread error\n";
                 } else if(res<128) {
                     std::cout << "BRSTM Error: NDSP Init error\n";
                 } else {

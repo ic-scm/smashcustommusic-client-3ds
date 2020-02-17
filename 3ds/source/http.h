@@ -1,11 +1,10 @@
-#include <cstdio> //remove these later
+#include <cstdio>
 #include <inttypes.h>
-
 #include "curl/curl.h"
 
 #pragma once
 
-Result http_download(const char *url)
+/*Result http_download(const char *url)
 {
     Result ret=0;
     httpcContext context;
@@ -315,3 +314,72 @@ int downloadFile(char* URL, char* filepath, progressbar_t* progbar) {
     
     return retcode;
 }
+*/
+
+void http_init() {
+    curl_global_init(CURL_GLOBAL_ALL);
+}
+
+void http_exit() {
+    curl_global_cleanup();
+}
+
+
+//curl write data function
+static size_t write_data(void *ptr, size_t size, size_t nmemb, void *stream) {
+    size_t written = fwrite(ptr, size, nmemb, (FILE *)stream);
+    return written;
+}
+
+unsigned char http_downloadfile(const char* url, const char* filename) {
+    CURL *curl_handle;
+    CURLcode cres;
+    FILE *file;
+    
+    /* init the curl session */ 
+    curl_handle = curl_easy_init();
+    
+    /* set URL to get here */ 
+    curl_easy_setopt(curl_handle, CURLOPT_URL, url);
+    
+    /* Switch on full protocol/debug output while testing */ 
+    curl_easy_setopt(curl_handle, CURLOPT_VERBOSE, 1L);
+    
+    /* disable progress meter, set to 0L to enable it */ 
+    curl_easy_setopt(curl_handle, CURLOPT_NOPROGRESS, 1L);
+    
+    /* send all data to this function  */ 
+    curl_easy_setopt(curl_handle, CURLOPT_WRITEFUNCTION, write_data);
+    
+    curl_easy_setopt(curl_handle, CURLOPT_FAILONERROR, 1L);
+    
+    curl_easy_setopt(curl_handle, CURLOPT_IPRESOLVE, CURL_IPRESOLVE_V4);
+    
+    curl_easy_setopt(curl_handle, CURLOPT_USERAGENT, "Mozilla/5.0 (Nintendo 3DS; U; ; en) AppleWebKit/536.30 (KHTML, like Gecko) SCMClient/0.1");
+    
+    //Open file
+    file = fopen(filename, "wb");
+    if(file) {
+        /* write the page body to this file handle */ 
+        curl_easy_setopt(curl_handle, CURLOPT_WRITEDATA, file);
+        
+        /* get it! */ 
+        cres = curl_easy_perform(curl_handle);
+        
+        /* close the header file */ 
+        fclose(file);
+    } else {
+        //Unable to open file
+        std::cout << "Unable to open file in http_downloadfile\n"; //remove later
+        return 255;
+    }
+    
+    curl_easy_cleanup(curl_handle);
+    
+    if (cres != CURLE_OK) {
+        return 128;
+    }
+    
+    return 0;
+}
+
