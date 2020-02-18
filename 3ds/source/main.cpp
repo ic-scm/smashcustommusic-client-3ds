@@ -25,6 +25,10 @@ int main() {
     consoleInit(GFX_TOP, NULL);
     audio_brstm_init();
     
+    if(int res = http_init()) {
+        std::cout << "CURL error " << res << '\n';
+    }
+    
     /*Result rc = romfsInit();
     if (rc) printf("romfsInit: %08lX\n", rc);
     else {
@@ -108,6 +112,7 @@ int main() {
     }
     
     audio_brstm_exit();
+    http_exit();
     //romfsExit();
     gfxExit();
     return 0;
