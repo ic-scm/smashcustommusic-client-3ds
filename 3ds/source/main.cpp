@@ -4,6 +4,10 @@
 #include <fstream>
 #include <cstring>
 #include <math.h>
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
+#include <malloc.h>
 #include <3ds.h>
 
 #include "audio.h"
@@ -20,12 +24,30 @@ char* getSwkbText(const char* hint) {
     return swkb_buf;
 }
 
+#define SOC_ALIGN      0x1000
+#define SOC_BUFFERSIZE 0x100000
+
 int main() {
     gfxInitDefault();
     consoleInit(GFX_TOP, NULL);
     audio_brstm_init();
     
-    if(int res = http_init()) {
+    int res = 0;
+    
+    //Initialize socket service
+    uint32_t* SOC_buffer = (uint32_t*)memalign(SOC_ALIGN, SOC_BUFFERSIZE);
+    
+    if(SOC_buffer == NULL) {
+        std::cout << "Failed to initalize socket service.\n";
+        exit(1);
+    }
+    //Now intialise soc:u service
+    if((res = socInit(SOC_buffer, SOC_BUFFERSIZE)) != 0) {
+        std::cout << "Failed to initalize socket service.\nsocInit: 0x" << std::hex << res << std::dec << "\n";
+        exit(1);
+    }
+    
+    if((res = http_init())) {
         std::cout << "CURL error " << res << '\n';
     }
     
@@ -111,6 +133,7 @@ int main() {
         gfxSwapBuffers();
     }
     
+    socExit();
     audio_brstm_exit();
     http_exit();
     //romfsExit();
