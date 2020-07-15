@@ -111,10 +111,10 @@ int main() {
             audio_brstm_togglepause();
         }
         if(kDown & KEY_LEFT) {
-            audio_brstm_seek(-HEAD1_sample_rate);
+            audio_brstm_seek(0-audio_brstm_s->sample_rate);
         }
         if(kDown & KEY_RIGHT) {
-            audio_brstm_seek(HEAD1_sample_rate);
+            audio_brstm_seek(audio_brstm_s->sample_rate);
         }
         
         //Draw colors on bottom screen
