@@ -86,7 +86,15 @@ int main() {
         
         if (kDown & KEY_A) {
             unsigned char res;
-            res = http_downloadfile(getSwkbText("Enter brstm URL"),"/scm.brstm");
+            
+            //Make correct URL with brstm ID
+            char url[1024];
+            strcpy(url, "https://smashcustommusic.net/brstm/");
+            const char* kb_input = getSwkbText("Enter brstm ID");
+            strcat(url, kb_input);
+            strcat(url, "&noIncrement=1");
+            
+            res = http_downloadfile(url ,"/scm.brstm");
             if(res) {
                 std::cout << "Download fail\n";
             }
