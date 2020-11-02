@@ -5,7 +5,7 @@
 
 #include "libopenrevolution/brstm.h"
 
-#define AUDIO_OUTPUT_BUFSIZE 2048
+#define AUDIO_OUTPUT_BUFSIZE 8192
 
 //BRSTM file data
 Brstm* audio_brstm_s = nullptr;
@@ -120,6 +120,16 @@ void audio_mainloop(void* arg) {
                 audio_brstm_paused = true;
                 playback_current_sample = 0;
             }
+            
+            //Check system headphone status
+            bool headphone_status = 0;
+            DSP_GetHeadphoneStatus(&headphone_status);
+            //Disable full sleep mode if BRSTM is playing and headphones are plugged in
+            if(!audio_brstm_paused && headphone_status) {
+                aptSetSleepAllowed(0);
+            } else {
+                aptSetSleepAllowed(1);
+            }
         }
     }
 }
@@ -186,6 +196,11 @@ unsigned char audio_brstm_play(const char* filename) {
     }
     
     return 0;
+}
+
+//Load a BRSTM through network streaming
+unsigned char audio_brstm_netstream_play(const char* url) {
+    
 }
 
 //Initialize BRSTM playback thread (run this at the beginning of main)

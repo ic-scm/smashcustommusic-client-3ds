@@ -31,6 +31,7 @@ int main() {
     gfxInitDefault();
     consoleInit(GFX_TOP, NULL);
     audio_brstm_init();
+    aptInit();
     
     int res = 0;
     
@@ -146,5 +147,6 @@ int main() {
     http_exit();
     //romfsExit();
     gfxExit();
+    aptExit();
     return 0;
 }
