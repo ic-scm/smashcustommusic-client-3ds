@@ -1,5 +1,5 @@
-//Some functions used by brstm.h, brstm_encode.h and other parts of the OpenRevolution libs
-//Copyright (C) 2020 Extrasklep
+//Some functions used by brstm.h, brstm_encode.h and other parts of the OpenRevolution libraries
+//Copyright (C) 2020 IC
 
 //Bool endian: 0 = little endian, 1 = big endian
 
@@ -45,7 +45,6 @@ unsigned long brstm_getSliceAsNumber(const unsigned char* data,unsigned long sta
 
 //Get slice as signed 16 bit number
 signed int brstm_getSliceAsInt16Sample(const unsigned char * data,unsigned long start,bool endian) {
-    unsigned int length=2;
     unsigned long number=0;
     unsigned char bytes[2]={data[start],data[start+1]};
     unsigned char little=bytes[endian];

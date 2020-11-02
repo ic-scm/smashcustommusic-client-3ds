@@ -1,6 +1,6 @@
-//C++ BRSTM reader
-//Copyright (C) 2020 Extrasklep
-//https://github.com/Extrasklep/openrevolution
+//C++ BRSTM and other format reading tools
+//Copyright (C) 2020 IC
+//https://github.com/ic-scm/openrevolution
 
 #pragma once
 #include <iostream>
@@ -9,24 +9,26 @@
 
 //Bool endian: 0 = little endian, 1 = big endian
 
-const char* BRSTM_version_str = "v2.2.1";
+const char* BRSTM_version_str = "v2.5.2";
 const char* brstm_getVersionString() {return BRSTM_version_str;}
 
 //Format information
 const unsigned int BRSTM_formats_count = 6;
 //File header magic words for each file format
-const char* BRSTM_formats_str[BRSTM_formats_count] = {"    ","RSTM","CSTM","FSTM","BWAV","OSTM"};
+const char* BRSTM_formats_str[BRSTM_formats_count] = {"RIFF","RSTM","CSTM","FSTM","BWAV","OSTM"};
 //Offset to the audio offset information in each format (32 bit integer)
 //(doesn't have to be accurate, just enough to fit the entire file header before it)
-const unsigned int BRSTM_formats_audio_off_off[BRSTM_formats_count] = {0x00,0x70,0x00,0x30,0x40,0x00};
+const unsigned int BRSTM_formats_audio_off_off[BRSTM_formats_count] = {0x00,0x70,0x30,0x30,0x40,0x00};
 //Offset to the codec information and their sizes in each format
-const unsigned int BRSTM_formats_codec_off  [BRSTM_formats_count] = {0x00,0x60,0x00,0x60,0x10,0x00};
+const unsigned int BRSTM_formats_codec_off  [BRSTM_formats_count] = {0x14,0x60,0x60,0x60,0x10,0x00};
 const unsigned int BRSTM_formats_codec_bytes[BRSTM_formats_count] = {1,1,1,1,2,1};
-//Short human readable strings
-const char* BRSTM_formats_short_usr_str[BRSTM_formats_count] = {"None","BRSTM","BCSTM","BFSTM","BWAV","ORSTM"};
+//Default byte order for formats (used in encoder)
+const bool BRSTM_formats_default_endian[BRSTM_formats_count] = {0,1,0,1,0,0};
+//Short human readable strings (equal to file extension)
+const char* BRSTM_formats_short_usr_str[BRSTM_formats_count] = {"WAV","BRSTM","BCSTM","BFSTM","BWAV","ORSTM"};
 //Long human readable strings
 const char* BRSTM_formats_long_usr_str [BRSTM_formats_count] = {
-"Unknown format",
+"Waveform Audio",
 "Binary Revolution Stream",
 "Binary CTR Stream",
 "Binary Cafe Stream",
@@ -51,7 +53,7 @@ struct Brstm {
     bool BOM = 0;
     //File type, 1 = BRSTM, see above for full list
     unsigned int  file_format   = 0;
-    //Audio codec, 0 = PCM8, 1 = PCM16, 2 = DSPADPCM
+    //Audio codec, 0 = PCM8, 1 = PCM16, 2 = DSPADPCM, see above for full list
     unsigned int  codec         = 0;
     bool          loop_flag     = 0;
     unsigned int  num_channels  = 0;
@@ -66,10 +68,11 @@ struct Brstm {
     unsigned long final_block_samples = 0;
     unsigned long final_block_size_p  = 0;
     
-    //track information
+    //Track information
     unsigned int  num_tracks      = 0;
     unsigned int  track_desc_type = 0;
     unsigned int  track_num_channels[8] = {0,0,0,0,0,0,0,0};
+    //TODO: Add support for more channels per track.
     unsigned int  track_lchannel_id [8] = {0,0,0,0,0,0,0,0};
     unsigned int  track_rchannel_id [8] = {0,0,0,0,0,0,0,0};
     unsigned int  track_volume      [8] = {0,0,0,0,0,0,0,0};
@@ -89,10 +92,16 @@ struct Brstm {
     unsigned long  encoded_file_size = 0;
     
     //Things you probably shouldn't touch
-    //block cache
+    //Block cache
     int16_t* PCM_blockbuffer[16];
-    int PCM_blockbuffer_currentBlock = -1;
+    unsigned long PCM_blockbuffer_currentBlock = -1;
     bool getbuffer_useBuffer = true;
+    //Audio stream format,
+    //0 for normal block data in BRSTM and similar files
+    //1 for WAV which has 1 sample per block
+    //so the block size here can be made bigger and block reads
+    //won't be made one by one for every sample
+    unsigned int audio_stream_format = 0;
 };
 
 #include "utils.h"
@@ -125,9 +134,10 @@ const char* brstm_getErrorString(unsigned char code) {
         case 250: return invalidfile;
         case 249: return "Too many channels";
         case 248: return "Too many tracks";
-        case 244: return "Unknown track description type";
+        case 244: return "Invalid track information";
         case 240: return invalidfile;
         case 230: return invalidfile;
+        case 222: return "Cannot write raw ADPCM data because the codec is not ADPCM";
         case 220: return "Unsupported audio codec";
         case 210: return "Unsupported file format or invalid file";
     }
@@ -138,23 +148,26 @@ const char* brstm_getErrorString(unsigned char code) {
 unsigned int brstm_getStandardCodecNum(Brstm* brstmi,unsigned int num) {
     switch(brstmi->file_format) {
         case 0: {
-            //None
-            return -1;
+            //WAV (PCM16 only)
+            return 1;
         }
         case 1: {
             //BRSTM
-            if(num >= 0 && num < 3) {
+            if(num < 3) {
                 return num;
             }
             return -1;
         }
         case 2: {
-            //BCSTM (unsupported)
+            //BCSTM
+            if(num < 4) {
+                return num;
+            }
             return -1;
         }
         case 3: {
             //BFSTM
-            if(num >= 0 && num < 4) {
+            if(num < 4) {
                 return num;
             }
             return -1;
@@ -197,9 +210,10 @@ unsigned int brstm_getStandardCodecNum(Brstm* brstmi,unsigned int num) {
  *      250 = Invalid HEAD chunk (Doesn't begin with HEAD)
  *      249 = Too many channels
  *      248 = Too many tracks
- *      244 = Unknown track info type
+ *      244 = Invalid track information
  *      240 = Invalid ADPC chunk (Doesn't begin with ADPC)
  *      230 = Invalid DATA chunk (Doesn't begin with DATA)
+ *      222 = Cannot write raw ADPCM data because the codec is not ADPCM
  *      220 = Unsupported or unknown audio codec
  *      210 = Unsupported file format
  *      200 = Unknown error (this should never happen)
@@ -221,21 +235,24 @@ unsigned char brstm_read(Brstm* brstmi,const unsigned char* fileData,signed int 
     unsigned char readres = 0;
     
     //Find filetype
-    brstmi->file_format = 0;
+    brstmi->file_format = BRSTM_formats_count;
     for(unsigned int t=0;t<BRSTM_formats_count;t++) {
         if(strcmp(BRSTM_formats_str[t],brstm_getSliceAsString(fileData,0,strlen(BRSTM_formats_str[t]))) == 0) {
             brstmi->file_format = t;
             break;
         }
     }
-    if(brstmi->file_format == 0) {
+    if(brstmi->file_format >= BRSTM_formats_count) {
         if(debugLevel>=0) {std::cout << "Invalid or unsupported file format.\n";}
         return 210;
     }
     
     if(debugLevel>0) std::cout << "File format: " << brstm_getShortFormatString(brstmi) << '\n';
     
-    if(brstmi->file_format == 1) {
+    if(brstmi->file_format == 0) {
+        //WAV
+        readres = brstm_formats_read_wav  (brstmi,fileData,debugLevel,decodeAudio);
+    } else if(brstmi->file_format == 1) {
         //BRSTM
         readres = brstm_formats_read_brstm(brstmi,fileData,debugLevel,decodeAudio);
     } else if(brstmi->file_format == 2) {
@@ -259,7 +276,8 @@ unsigned char brstm_read(Brstm* brstmi,const unsigned char* fileData,signed int 
     //BRSTM reader has it's own logger
     if(brstmi->file_format != 1) {
         if(debugLevel>0) {std::cout
-            << "Codec: " << brstm_getCodecString(brstmi)
+            << "Byte order: " << (BOM == 1 ? "Big endian" : "Little endian")
+            << "\nCodec: " << brstm_getCodecString(brstmi)
             << "\nLoop: " << brstmi->loop_flag
             << "\nChannels: " << brstmi->num_channels
             << "\nSample rate: " << brstmi->sample_rate
@@ -305,6 +323,12 @@ unsigned char brstm_read(Brstm* brstmi,const unsigned char* fileData,signed int 
                 std::cout << "\n\n";
             }
         }
+    }
+    
+    //Fail on unsupported codecs
+    if(brstmi->codec > 2) {
+        if(debugLevel >= 0) {std::cout << brstm_getCodecString(brstmi) << " codec is not supported.\n";}
+        return 220;
     }
     
     return readres;
@@ -375,17 +399,24 @@ void brstm_getbuffer_main(Brstm * brstmi,const unsigned char* fileData,bool data
                 brstmi->PCM_buffer[c][p] = brstmi->PCM_blockbuffer[c][dataIndex+p];
             }
         }
-        if(blockEndReached) {
+        while(blockEndReached) {
+            blockEndReached = false;
             //safety, return if we are outside the last block
             if((sampleOffset+blockEndReachedAt)/brstmi->blocks_samples >= brstmi->total_blocks) return;
             //don't make a new buffer in PCM_buffer
             brstmi->getbuffer_useBuffer = false;
             brstm_getbuffer_main(brstmi,fileData,dataType,sampleOffset+blockEndReachedAt,0);
             brstmi->getbuffer_useBuffer = true;
+            unsigned int newstart = blockEndReachedAt;
             for(unsigned int c=0;c<brstmi->num_channels;c++) {
                 unsigned int dataIndex=0;
-                for(unsigned int p=blockEndReachedAt;p<bufferSamples;p++) {
+                for(unsigned int p=newstart;p<bufferSamples;p++) {
                     brstmi->PCM_buffer[c][p] = brstmi->PCM_blockbuffer[c][dataIndex++];
+                    if(dataIndex >= brstmi->blocks_samples) {
+                        blockEndReached = true;
+                        blockEndReachedAt = ++p;
+                        break;
+                    }
                 }
             }
         }
@@ -396,7 +427,7 @@ void brstm_getbuffer(Brstm * brstmi,const unsigned char* fileData,unsigned long 
     brstm_getbuffer_main(brstmi,fileData,0,sampleOffset,bufferSamples);
 }
 
-//don't do void* kids
+//BRSTM file fstream object to be passed to other functions because passing through void* never worked.
 std::ifstream* brstm_ifstream;
 
 void brstm_fstream_getbuffer(Brstm * brstmi,std::ifstream& stream,unsigned long sampleOffset,unsigned int bufferSamples) {
@@ -430,6 +461,7 @@ unsigned char brstm_fstream_read_header(Brstm * brstmi,std::ifstream& stream,sig
     bool &BOM = brstmi->BOM;
     unsigned char res = 0;
     unsigned char* brstm_header;
+    brstmi->file_format = BRSTM_formats_count;
     
     //find file format so we can read the header size from the correct offset
     for(unsigned int t=0;t<BRSTM_formats_count;t++) {
@@ -445,12 +477,13 @@ unsigned char brstm_fstream_read_header(Brstm * brstmi,std::ifstream& stream,sig
             break;
         }
     }
-    if(brstmi->file_format == 0) {
+    if(brstmi->file_format >= BRSTM_formats_count) {
         if(debugLevel>=0) {std::cout << "Invalid or unsupported file format.\n";}
         return 210;
     }
     
-    //read Byte Order Mark
+    //Read Byte Order Mark
+    //WAV does not have a byte order mark but this will default to LE which is correct
     unsigned char bomword[2];
     stream.seekg(0x04);
     stream.read((char*)bomword,2);
@@ -461,10 +494,15 @@ unsigned char brstm_fstream_read_header(Brstm * brstmi,std::ifstream& stream,sig
     }
     
     //get offset to audio data so we know how much data to read to get the full header
-    stream.seekg(BRSTM_formats_audio_off_off[brstmi->file_format]);
-    unsigned char audioOff[4];
-    stream.read((char*)audioOff,4);
-    brstmi->audio_offset = brstm_getSliceAsNumber(audioOff,0,4,BOM) + 64;
+    if(BRSTM_formats_audio_off_off[brstmi->file_format] != 0) {
+        stream.seekg(BRSTM_formats_audio_off_off[brstmi->file_format]);
+        unsigned char audioOff[4];
+        stream.read((char*)audioOff,4);
+        brstmi->audio_offset = brstm_getSliceAsNumber(audioOff,0,4,BOM) + 64;
+    } else {
+        //If the audio offset for this file in the library is set to 0 then use a default offset.
+        brstmi->audio_offset = 8192;
+    }
     
     //Get codec
     stream.seekg(BRSTM_formats_codec_off[brstmi->file_format]);
@@ -554,4 +592,5 @@ void brstm_close(Brstm * brstmi) {
         brstmi->track_panning     [i] = 0;
     }
     brstmi->PCM_blockbuffer_currentBlock = -1;
+    brstmi->audio_stream_format = 0;
 }

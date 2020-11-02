@@ -1,5 +1,5 @@
-//Revolution BWAV encoder
-//Copyright (C) 2020 Extrasklep
+//OpenRevolution BWAV encoder
+//Copyright (C) 2020 IC
 
 //Thanks to https://gota7.github.io/Citric-Composer/specs/binaryWav.html
 //And again BWAV is weird and stupid
@@ -21,7 +21,6 @@ unsigned char brstm_formats_encode_bwav(Brstm* brstmi,signed int debugLevel,uint
     }
     
     bool &BOM = brstmi->BOM;
-    BOM = 0; //Little Endian
     char spinner = '/';
     uint32_t CRCsum = 0xFFFFFFFF;
     
@@ -37,8 +36,15 @@ unsigned char brstm_formats_encode_bwav(Brstm* brstmi,signed int debugLevel,uint
     //Header
     //Magic word
     brstm_encoder_writebytes(buffer,(unsigned char*)"BWAV",4,bufpos);
-    //Byte Order Mark (LE) and version
-    brstm_encoder_writebytes_i(buffer,new unsigned char[4]{0xFF,0xFE,0x01,0x00},4,bufpos);
+    //Byte order mark
+    switch(BOM) {
+        //LE
+        case 0: brstm_encoder_writebytes_i(buffer,new unsigned char[2]{0xFF,0xFE},2,bufpos); break;
+        //BE
+        case 1: brstm_encoder_writebytes_i(buffer,new unsigned char[2]{0xFE,0xFF},2,bufpos); break;
+    }
+    //Version
+    brstm_encoder_writebytes_i(buffer,new unsigned char[2]{0x01,0x00},2,bufpos);
     //CRC32 hash (will be actually written later)
     brstm_encoder_writebytes_i(buffer,new unsigned char[4]{0x00,0x00,0x00,0x00},4,bufpos);
     //Padding
@@ -63,7 +69,9 @@ unsigned char brstm_formats_encode_bwav(Brstm* brstmi,signed int debugLevel,uint
         brstm_encoder_writebytes(buffer,brstm_encoder_getByteUint(brstmi->total_samples,4,BOM),4,bufpos);
         //ADPCM coefs 16xInt16
         if(brstmi->codec == 2) {
-            DSPCorrelateCoefs(brstmi->PCM_samples[c],brstmi->total_samples,brstmi->ADPCM_coefs[c]);
+            if(encodeADPCM == 1) {
+                DSPCorrelateCoefs(brstmi->PCM_samples[c],brstmi->total_samples,brstmi->ADPCM_coefs[c]);
+            }
             for(unsigned char i=0;i<16;i++) {
                 brstm_encoder_writebytes(buffer,brstm_encoder_getByteInt16(brstmi->ADPCM_coefs[c][i],BOM),2,bufpos);
             }
