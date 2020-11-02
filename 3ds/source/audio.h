@@ -5,6 +5,8 @@
 
 #include "libopenrevolution/brstm.h"
 
+#define AUDIO_OUTPUT_BUFSIZE 2048
+
 //BRSTM file data
 Brstm* audio_brstm_s = nullptr;
 std::ifstream audio_brstm_file;
@@ -22,7 +24,9 @@ uint32_t *audioBuffer;
 unsigned char audio_init() {
     audio_fillBlock=false;
     
-    audioBuffer = (uint32_t*)linearAlloc(audio_samplesperbuf*sizeof(uint32_t)*2);
+    //3 buffers and only using 1 and 2... I have no idea what the devkitpro people broke again but the first buffer would have always caused popping noises.
+    //TODO
+    audioBuffer = (uint32_t*)linearAlloc(audio_samplesperbuf*sizeof(uint32_t)*3);
     
     if(ndspInit()) {return 1;}
     ndspSetOutputMode(NDSP_OUTPUT_STEREO);
@@ -30,10 +34,12 @@ unsigned char audio_init() {
     ndspChnSetRate(0, audio_samplerate);
     ndspChnSetFormat(0, NDSP_FORMAT_STEREO_PCM16);
     
-    memset(waveBuf,0,sizeof(waveBuf));
-    waveBuf[0].data_vaddr = &audioBuffer[0];
+    memset(&waveBuf[0], 0, sizeof(ndspWaveBuf));
+    memset(&waveBuf[1], 0, sizeof(ndspWaveBuf));
+    
+    waveBuf[0].data_vaddr = &audioBuffer[audio_samplesperbuf];
     waveBuf[0].nsamples = audio_samplesperbuf;
-    waveBuf[1].data_vaddr = &audioBuffer[audio_samplesperbuf];
+    waveBuf[1].data_vaddr = &audioBuffer[audio_samplesperbuf*2];
     waveBuf[1].nsamples = audio_samplesperbuf;
     waveBuf[0].status = NDSP_WBUF_DONE;
     waveBuf[1].status = NDSP_WBUF_DONE;
@@ -43,21 +49,20 @@ unsigned char audio_init() {
 //Deinitialize NDSP
 void audio_deinit() {
     ndspExit();
-    memset(audioBuffer,0,audio_samplesperbuf*sizeof(uint32_t)*2);
+    memset(audioBuffer,0,audio_samplesperbuf*sizeof(uint32_t)*3);
     linearFree(audioBuffer);
     audio_samplerate = 0;
     audio_samplesperbuf = 0;
     audio_fillBlock = false;
-    memset(waveBuf,0,sizeof(waveBuf));
 }
 
 unsigned long playback_current_sample=0;
 bool audio_brstm_paused = true;
 
 unsigned char audio_fillbuffer(void *audioBuffer,size_t size) {
-    int16_t *dest = (int16_t*)audioBuffer;
+    uint32_t *dest = (uint32_t*)audioBuffer;
     
-    int playback_seconds=playback_current_sample/audio_brstm_s->sample_rate;
+    int playback_seconds = playback_current_sample / audio_brstm_s->sample_rate;
     std::cout << '\r';
     if(audio_brstm_paused) {std::cout << "Paused ";}
     std::cout << "(" << playback_seconds << "/" << "??:??" << ") (< >:Seek):           \r" << std::flush;
@@ -65,31 +70,29 @@ unsigned char audio_fillbuffer(void *audioBuffer,size_t size) {
     if(!audio_brstm_paused) {
         brstm_fstream_getbuffer(audio_brstm_s,audio_brstm_file,playback_current_sample,
                         //Avoid reading garbage outside the file
-                        audio_brstm_s->total_samples-playback_current_sample < audio_samplesperbuf ? audio_brstm_s->total_samples-playback_current_sample : audio_samplesperbuf
+                        audio_brstm_s->total_samples-playback_current_sample < size ? audio_brstm_s->total_samples-playback_current_sample : size
                         );
         
         unsigned char ch1id = audio_brstm_s->track_lchannel_id [0];
         unsigned char ch2id = audio_brstm_s->track_num_channels[0] == 2 ? audio_brstm_s->track_rchannel_id[0] : ch1id;
         signed int ioffset=0;
-        unsigned int im = audio_samplesperbuf*2;
-        for(unsigned int i=0; i<im; i+=2) {
-            dest[i]   = audio_brstm_s->PCM_buffer[ch1id][(i+ioffset) >> 1];
-            dest[i+1] = audio_brstm_s->PCM_buffer[ch2id][(i+ioffset) >> 1];
+        
+        for(unsigned int i=0; i<size; i++) {
+            dest[i] = (audio_brstm_s->PCM_buffer[ch2id][(i+ioffset)] << 16) | (audio_brstm_s->PCM_buffer[ch1id][(i+ioffset)] & 0xffff);
             playback_current_sample++;
             
             //loop/end
             if(playback_current_sample >= audio_brstm_s->total_samples) {
                 if(audio_brstm_s->loop_flag) {
-                    playback_current_sample=audio_brstm_s->loop_start;
+                    playback_current_sample = audio_brstm_s->loop_start;
                     //refill buffer
-                    brstm_fstream_getbuffer(audio_brstm_s,audio_brstm_file,playback_current_sample,audio_samplesperbuf);
-                    ioffset-=i;
+                    brstm_fstream_getbuffer(audio_brstm_s, audio_brstm_file, playback_current_sample, size);
+                    ioffset = 0-(i+1);
                 } else {return 1;}
             }
         }
     } else {
-        unsigned int im = audio_samplesperbuf*2;
-        for(unsigned int i=0; i<im; i++) {
+        for(unsigned int i=0; i<size; i++) {
             dest[i] = 0;
         }
     }
@@ -108,13 +111,15 @@ void audio_mainloop(void* arg) {
         svcSleepThread(10 * 1000000);
         //fill audio buffers
         if (waveBuf[audio_fillBlock].status == NDSP_WBUF_DONE && audio_brstm_isopen) {
-            if(audio_fillbuffer(waveBuf[audio_fillBlock].data_pcm16, waveBuf[audio_fillBlock].nsamples)) {
+            uint8_t fillbuffer_res = audio_fillbuffer(waveBuf[audio_fillBlock].data_pcm16, waveBuf[audio_fillBlock].nsamples);
+            ndspChnWaveBufAdd(0, &waveBuf[audio_fillBlock]);
+            audio_fillBlock = !audio_fillBlock;
+            
+            if(fillbuffer_res) {
                 //end of file reached. stop playing
                 audio_brstm_paused = true;
                 playback_current_sample = 0;
             }
-            ndspChnWaveBufAdd(0, &waveBuf[audio_fillBlock]);
-            audio_fillBlock = !audio_fillBlock;
         }
     }
 }
@@ -171,7 +176,7 @@ unsigned char audio_brstm_play(const char* filename) {
     
     //set NDSP sample rate to the BRSTM's sample rate
     audio_samplerate = audio_brstm_s->sample_rate;
-    audio_samplesperbuf = audio_brstm_s->blocks_samples;
+    audio_samplesperbuf = AUDIO_OUTPUT_BUFSIZE;
     audio_brstm_isopen = true;
     audio_brstm_paused = true;
     if(audio_init()) {
