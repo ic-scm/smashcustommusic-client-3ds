@@ -1,5 +1,5 @@
-﻿//3DS Smash Custom Music Client
-//Copyright (C) 2020 Extrasklep
+﻿//3DS BRSTM and SmashCustomMusic experiments
+//Copyright (C) 2020 I.C.
 #include <iostream>
 #include <fstream>
 #include <cstring>
