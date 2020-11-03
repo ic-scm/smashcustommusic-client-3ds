@@ -16,7 +16,7 @@ void http_exit() {
 uint32_t http_totalwritten = 0;
 bool     http_contentlength_checked = 0;
 uint32_t http_contentlength = 0;
-static size_t write_data(void *ptr, size_t size, size_t nmemb, void *stream) {
+size_t write_data(void *ptr, size_t size, size_t nmemb, void *stream) {
     size_t written = fwrite(ptr, size, nmemb, (FILE *)stream);
     http_totalwritten += written;
     if(http_contentlength == 0 && http_contentlength_checked == 0) {
@@ -30,7 +30,7 @@ static size_t write_data(void *ptr, size_t size, size_t nmemb, void *stream) {
     return written;
 }
 
-unsigned char http_downloadfile(const char* url, const char* filename) {
+unsigned char http_downloadfile(const char* url, const char* filename, size_t (*cb)(void*, size_t, size_t, void*)) {
     CURLcode cres;
     FILE *file;
     
@@ -38,7 +38,7 @@ unsigned char http_downloadfile(const char* url, const char* filename) {
     curl_easy_setopt(curl_handle, CURLOPT_URL, url); //set URL to get here
     //curl_easy_setopt(curl_handle, CURLOPT_VERBOSE, 1L); //Switch on full protocol/debug output while testing
     curl_easy_setopt(curl_handle, CURLOPT_NOPROGRESS, 1L); //disable progress meter, set to 0L to enable it
-    curl_easy_setopt(curl_handle, CURLOPT_WRITEFUNCTION, write_data); //send all data to this function
+    curl_easy_setopt(curl_handle, CURLOPT_WRITEFUNCTION, cb); //send all data to this function
     curl_easy_setopt(curl_handle, CURLOPT_FOLLOWLOCATION, 1L);
     curl_easy_setopt(curl_handle, CURLOPT_FAILONERROR, 1L);
     curl_easy_setopt(curl_handle, CURLOPT_HTTP_VERSION, (long)CURL_HTTP_VERSION_2TLS);
@@ -75,3 +75,6 @@ unsigned char http_downloadfile(const char* url, const char* filename) {
     return 0;
 }
 
+unsigned char http_downloadfile(const char* url, const char* filename) {
+    return http_downloadfile(url, filename, write_data);
+}
